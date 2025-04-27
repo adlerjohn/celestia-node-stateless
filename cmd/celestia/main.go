@@ -22,52 +22,42 @@ type SignedBlock struct {
 	ValidatorSet *types.ValidatorSet `json:"validator_set"`
 }
 
-func main() {
-	args := os.Args[1:]
-	if len(args) == 0 {
-		os.Exit(0)
-	}
+type CoreAccessor struct {
+	ctx    context.Context
+	client coregrpc.BlockAPIClient
+}
 
-	// First argument is the core address
+func NewCoreAccessor(ip string) (*CoreAccessor, error) {
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
-	conn, err := grpc.NewClient(args[0], opts...)
+	conn, err := grpc.NewClient(ip, opts...)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return nil, err
 	}
 	ctx := context.WithoutCancel(context.Background())
 
 	client := coregrpc.NewBlockAPIClient(conn)
 
-	switch args[1] {
-	case "share":
-		fmt.Println("share")
-	case "blob":
-		fmt.Println("blob")
-	case "block":
-		fmt.Println("block")
-		height, err := strconv.Atoi(args[2])
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		stream, err := client.BlockByHeight(ctx, &coregrpc.BlockByHeightRequest{Height: int64(height)})
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		block, err := receiveBlockByHeight(stream)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		fmt.Println(block)
-	default:
-		os.Exit(0)
+	return &CoreAccessor{ctx, client}, nil
+}
+
+func (c CoreAccessor) getSignedBlock(h string) (*SignedBlock, error) {
+	// Third argument is block height
+	height, err := strconv.Atoi(h)
+	if err != nil {
+		return nil, err
 	}
-	os.Exit(0)
+
+	stream, err := c.client.BlockByHeight(c.ctx, &coregrpc.BlockByHeightRequest{Height: int64(height)})
+	if err != nil {
+		return nil, err
+	}
+	block, err := receiveBlockByHeight(stream)
+	if err != nil {
+		return nil, err
+	}
+	return block, nil
 }
 
 func receiveBlockByHeight(streamer coregrpc.BlockAPI_BlockByHeightClient) (
@@ -142,4 +132,39 @@ func partsToBlock(parts []*tmproto.Part) (*types.Block, error) {
 		return nil, err
 	}
 	return block, nil
+}
+
+func main() {
+	args := os.Args[1:]
+	if len(args) == 0 {
+		os.Exit(0)
+	}
+
+	// First argument is the core address
+	coreAccessor, err := NewCoreAccessor(args[0])
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	// Second argument is command
+	switch args[1] {
+	case "share":
+		fmt.Println("share")
+	case "blob":
+		fmt.Println("blob")
+	case "block":
+		fmt.Println("block")
+		// Third argument is block height
+		block, err := coreAccessor.getSignedBlock(args[2])
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		fmt.Println(block)
+	default:
+		os.Exit(0)
+	}
+	os.Exit(0)
 }
