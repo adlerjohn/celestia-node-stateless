@@ -151,6 +151,13 @@ func main() {
 	switch args[1] {
 	case "share":
 		fmt.Println("share")
+		// Third argument is block height
+		block, err := coreAccessor.getSignedBlock(args[2])
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		fmt.Println(block)
 	case "blob":
 		fmt.Println("blob")
 	case "block":
